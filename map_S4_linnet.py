@@ -1,8 +1,5 @@
-import numpy as np
-
-
-XLIM = (100, 500)
-YLIM = (100, 650)
+X_LEFT = 100
+Y_TOP = 650
 
 boundaries = {
     0: [(145, 100), (450, 370), (450, 650)],
@@ -15,102 +12,140 @@ boundaries = {
 }
 
 
-tower = (310, 345, 1.23)
+################################
 
-def boundary_x(boundary_id, y):
+def make_polygon(boundary_points):
     """
-        Return the x-limit of one boundary at vertical coordinate y.
-        Points to the right or bottom of this limit are considered no-go.
+        Convert one boundary polyline into a closed polygon.
+
+        The polygon represents the area to the left/up-left of the boundary,
+        closed using x = 100 and y = 650.
     """
 
-    points = boundaries[boundary_id]
+    polygon = []
 
-    xs = np.array([p[0] for p in points])
-    ys = np.array([p[1] for p in points])
+    first_x, first_y = boundary_points[0]
 
-    return np.interp(y, xs, ys)
+    # If the boundary starts away from x = 100,
+    # add a horizontal connector from the left chart edge.
+    if first_x > X_LEFT:
+        polygon.append((X_LEFT, first_y))
+
+    # Add the actual boundary points
+    polygon.extend(boundary_points)
+
+    last_x, last_y = boundary_points[-1]
+
+    # Add top-left corner to close along y = 650
+    if last_x > X_LEFT:
+        polygon.append((X_LEFT, Y_TOP))
+
+    return polygon
 
 
-
-boundaries = {
-    0: [(145, 100), (450, 370), (450, 650)],
-    1: [(105, 100), (150, 132.5), (400, 355), (400, 650)],
-    2: [(100, 147.5), (282.5, 280), (350, 340), (350, 650)],
-    3: [(100, 200), (300, 345), (300, 650)],
-    4: [(100, 250), (250, 360), (250, 650)],
-    5: [(100, 302.5), (200, 375), (200, 650)],
-    6: [(100, 355), (150, 390), (150, 650)],
+# make the polygons. Essentially an automation to produce the dictionary 
+# that is commented out just below
+polygons = {
+    boundary_id: make_polygon(points)
+    for boundary_id, points in boundaries.items()
 }
 
-def max_angle(tower, boundaries):
+# polygons ={
+#     0: [(100, 100), (145, 100), (450, 370), (450, 650), (100, 650)], 
+#     1: [(100, 100), (105, 100), (150, 132.5), (400, 355), (400, 650), (100, 650)], 
+#     2: [(100, 147.5), (282.5, 280), (350, 340), (350, 650), (100, 650)], 
+#     3: [(100, 200), (300, 345), (300, 650), (100, 650)], 
+#     4: [(100, 250), (250, 360), (250, 650), (100, 650)], 
+#     5: [(100, 302.5), (200, 375), (200, 650), (100, 650)],
+#     6: [(100, 355), (150, 390), (150, 650), (100, 650)]
+# }
+
+
+####################################################
+
+
+def point_on_segment(px, py, ax, ay, bx, by, tol=1e-9):
     """
-        Return the maximum line angle (in degrees)
-    """
-
-    H, V, angle = tower
-    print(H)
-
-    max_angle = 6
-
-    for boundary_id in boundaries:
-        min_Vert = boundary_y(boundary_id, H)   
-        print(min_Vert)
-
-    return H, V, angle
-
-
-def boundary_y_at_x(boundary_points, x):
-    """
-        Return the y-value where one boundary crosses a given x-value.
-
-        Vertical segments are ignored, because for x = constant they do not
-        correspond to one unique y-value.
+        Return True if point P lies on segment AB.
     """
 
-    for p1, p2 in zip(boundary_points[:-1], boundary_points[1:]):
-        x1, y1 = p1
-        x2, y2 = p2
+    cross = (px - ax) * (by - ay) - (py - ay) * (bx - ax)
 
-        # Ignore vertical segments
-        if x1 == x2:
-            continue
+    if abs(cross) > tol:
+        return False
 
-        # Check whether x lies inside this segment's x-range
-        xmin = min(x1, x2)
-        xmax = max(x1, x2)
+    dot = (px - ax) * (bx - ax) + (py - ay) * (by - ay)
 
-        if xmin <= x <= xmax:
-            t = (x - x1) / (x2 - x1)
-            y = y1 + t * (y2 - y1)
-            return y
+    if dot < -tol:
+        return False
 
-    return None
+    length_sq = (bx - ax) ** 2 + (by - ay) ** 2
+
+    if dot > length_sq + tol:
+        return False
+
+    return True
 
 
-def all_boundary_y_values_at_x(x):
+def point_in_polygon(x, y, polygon):
     """
-    Return all valid boundary y-values for a given x.
+        Return True if point (x, y) is inside polygon.
+
+        Points exactly on polygon edges are treated as inside.
     """
 
-    results = []
+    inside = False
+    n = len(polygon)
 
-    for boundary_id, points in boundaries.items():
-        y = boundary_y_at_x(points, x)
+    for i in range(n):
+        x1, y1 = polygon[i]
+        x2, y2 = polygon[(i + 1) % n]
 
-        if y is not None:
-            results.append((boundary_id, y))
+        # Boundary check
+        if point_on_segment(x, y, x1, y1, x2, y2):
+            return True
 
-    return results
+        # Ray-casting test
+        crosses = (y1 > y) != (y2 > y)
 
-values = all_boundary_y_values_at_x(x)
+        if crosses:
+            x_cross = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
 
-    for boundary_id, y in values:
-        print(f"Boundary {boundary_id}: y = {y:.2f}")
+            if x < x_cross:
+                inside = not inside
+
+    return inside
+
+def containing_boundary_polygons(x, y):
+    """
+        Return the boundary polygons that contain point (x, y).
+    """
+
+    containing = []
+
+    for boundary_id, polygon in polygons.items():
+        if point_in_polygon(x, y, polygon):
+            containing.append(boundary_id)
+
+    return containing
+
+
+def count_containing_boundary_polygons(x, y):
+    """
+        Return how many boundary polygons contain point (x, y).
+    """
+
+    return len(containing_boundary_polygons(x, y))
 
 def main():
-    #a = max_angle(tower, boundaries)
-    a = boundary_y(0, 310)
-    print(a)
+    x = 200
+    y = 250
+
+    inside = containing_boundary_polygons(x, y)
+    count = count_containing_boundary_polygons(x, y)
+
+    print("Inside polygons:", inside)
+    print("Count:", count)
 
 if __name__ == "__main__":
     main()
