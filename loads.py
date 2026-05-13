@@ -31,19 +31,15 @@ def Vor(H, B_mon, phi, T, alpha, diam, wind, ice, ice_density, gravity, w):
 
 def main():
     
-    S = 290                 # m
-    h = 0                   # m
-    Th = 2875               # kg
-    
-    w = 1.303 -0.074               # kg/m   after subtracting K constant
-    diam = 25.15            # mm
+    w = 1.303                # kg/m   !!!!! consider subtracting K constant
+    diam = 25.15            # mm    Grosbeak = 25.15, Linnet = 18.31
     ice = 0                 # inches
     ice_density = 900       # kg/m^3
     wind = 20              # kg/m2
     gravity = 9.810665      # m/s^2
 
     phi = np.radians(35)    # the input in degrees 
-    T = 2775              # ruling span tension
+    T = 2160              # ruling span tension
     B_mon = 100              # kg     
     #alpha = np.radians(0)   # the input in degrees
     
@@ -77,6 +73,7 @@ def main():
     
     plt.xlim(100, 500)
     plt.ylim(100, 650)
+    plt.yticks(np.arange(100, 650, 50))
     plt.gca().set_aspect('equal', adjustable='box')
     
     plt.show()
